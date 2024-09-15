@@ -5,9 +5,9 @@ from pys import cyrus
 
 def exception_handler(exception_type, exception, traceback):
     del traceback
-    print("很抱歉，工具出现错误， 请把以下日志提交给开发者：")
+    print("Sorry, the tool encountered an error. Please submit the following log to the developer:")
     sys.stderr.write('{}: {}\n'.format(exception_type.__name__, exception))
-    if input("是否重启 [1=重启/0=退出]") == "1":
+    if input("Restart [1=Restart/0=Exit]") == "1":
         init()
     else:
         sys.exit(1)
@@ -20,4 +20,8 @@ def init():
 if __name__ == '__main__':
     multiprocessing.freeze_support()
     sys.excepthook = exception_handler
-    init()
+    try:
+        init()
+    except KeyboardInterrupt:
+        print("\nProcess interrupted by user. Exiting gracefully.")
+        sys.exit(0)

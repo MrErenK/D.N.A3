@@ -17,7 +17,7 @@ from rich.console import Console
 from rich.progress import Progress
 
 from pys import devdex
-from pys import dumper as extract_payload
+from pys.dumper import Dumper as extract_payload
 from pys import fspatch
 from pys import img2sdat
 from pys import imgextractor
@@ -256,25 +256,25 @@ def validate_default_env_setup(setup_manifest):
 
 def env_setup():
     question_list = {
-        '安卓版本[12]': "ANDROID_SDK",
-        '机型代号[alioth]': "DEVICE_CODE",
-        '是否动态分区[1/0]': "IS_DYNAMIC",
-        '是否虚拟AB分区[1/0]': "IS_VAB",
-        '合成镜像类型[0:EXT4/1:EROFS]': "REPACK_EROFS_IMG",
-        '合成镜像格式[0:RAW/1:SPARSE]': "REPACK_SPARSE_IMG",
-        '合成SUPER镜像格式[1:SPARSE/0:RAW]': "SUPER_SPARSE",
-        '合成EXT4动态分区状态[0:RO/1:RW]': "REPACK_TO_RW",
-        '合成EXT4压缩分区空间[0/1]': "RESIZE_IMG",
-        '合成EROFS压缩算法[0:NO/1:LZ4HC/2:LZ4]': "RESIZE_EROFSIMG",
-        '压缩BROTLI等级[0-9|3]': "REPACK_BR_LEVEL",
-        '动态分区簇名称[qti_dynamic_partitions]': "GROUP_NAME",
-        '动态SUPER分区总大小[9126805504]': "SUPER_SIZE",
-        '动态分区扇区大小[2048]': "SUPER_SECTOR",
-        '自定义UTC时间戳[live]': "UTC",
-        '分段DAT/IMG支持个数[15]': "UNPACK_SPLIT_DAT"}
+        'Android Version [12]': "ANDROID_SDK",
+        'Device Code [alioth]': "DEVICE_CODE",
+        'Dynamic Partition [1/0]': "IS_DYNAMIC",
+        'Virtual AB Partition [1/0]': "IS_VAB",
+        'Image Type [0:EXT4/1:EROFS]': "REPACK_EROFS_IMG",
+        'Image Format [0:RAW/1:SPARSE]': "REPACK_SPARSE_IMG",
+        'SUPER Image Format [1:SPARSE/0:RAW]': "SUPER_SPARSE",
+        'EXT4 Dynamic Partition State [0:RO/1:RW]': "REPACK_TO_RW",
+        'EXT4 Compressed Partition Space [0/1]': "RESIZE_IMG",
+        'EROFS Compression Algorithm [0:NO/1:LZ4HC/2:LZ4]': "RESIZE_EROFSIMG",
+        'BROTLI Compression Level [0-9|3]': "REPACK_BR_LEVEL",
+        'Dynamic Partition Group Name [qti_dynamic_partitions]': "GROUP_NAME",
+        'SUPER Partition Total Size [9126805504]': "SUPER_SIZE",
+        'Dynamic Partition Sector Size [2048]': "SUPER_SECTOR",
+        'Custom UTC Timestamp [live]': "UTC",
+        'Segmented DAT/IMG Support Count [15]': "UNPACK_SPLIT_DAT"}
     while True:
         os.system('cls' if os.name == 'nt' else "clear")
-        print(f"\n> {GREEN}设置文件{CLOSE}: {SETUP_JSON.replace(PWD_DIR, '')}")
+        print(f"\n> {GREEN}Setup File{CLOSE}: {SETUP_JSON.replace(PWD_DIR, '')}")
         i = 1
         data1 = {}
         with open(SETUP_JSON, 'r', encoding='utf-8') as ss:
@@ -283,12 +283,12 @@ def env_setup():
             print(f"{YELLOW}[{'0' if i < 10 else ''}{i}]{CLOSE}\t{BOLD}{name}{CLOSE}: {GREEN}{data[value]}{CLOSE}")
             data1[str(i)] = name
             i += 1
-        sum_ = input(f"\n请输入你要更改的序列，输入{YELLOW}00{CLOSE}为返回：")
+        sum_ = input(f"\nEnter the sequence number you want to change, enter {YELLOW}00{CLOSE} to return: ")
         if sum_ in ["00", "0"]:
             return
         if sum_ not in data1.keys():
             continue
-        data[question_list[data1[sum_]]] = input(data1[sum_] + "：")
+        data[question_list[data1[sum_]]] = input(data1[sum_] + ": ")
         validate_default_env_setup(data)
         with open(SETUP_JSON, 'w', encoding='utf-8') as ss:
             json.dump(data, ss, ensure_ascii=False, indent=4)
@@ -309,9 +309,9 @@ def find_file(path, rule):
                 yield os.path.join(root, file)
 
 
-def kill_avb():
+def disable_avb():
     for tab in find_file(V.project, "^fstab.*?"):
-        print(f"> 解除AVB加密: {tab}")
+        print(f"> Disabling AVB encryption: {tab}")
         with open(tab, "r") as sf:
             details = re.sub("avb.*?,", "", sf.read())
         details = re.sub(",avb,", ",", details)
@@ -320,9 +320,9 @@ def kill_avb():
             tf.write(details)
 
 
-def kill_dm():
+def disable_dm_verity():
     for tab in find_file(V.project, "^fstab.*?"):
-        print(f"> 解除DM加密: {tab}")
+        print(f"> Disabling DM-verity encryption: {tab}")
         with open(tab, "r") as sf:
             details = re.sub("forceencrypt=", "encryptable=", sf.read())
         details = re.sub(",fileencryption=.*metadata_encryption", "", details)
@@ -580,14 +580,14 @@ def repack_super():
                 image_size_b = imgextractor.ULTRAMAN().LEMON(img_b)
                 argvs += f'--partition {i}_a:readonly:{image_size_a}:{V.SETUP_MANIFEST["GROUP_NAME"]}_a --image {i}_a={img_a} --partition {i}_b:readonly:{image_size_b}:{V.SETUP_MANIFEST["GROUP_NAME"]}_b --image {i}_b={img_b} '
     if not parts or "--image" not in argvs:
-        input('> 未发现out文件夹下存在可用镜像文件')
+        input('> No usable image files found in the out folder')
         return
     if V.SETUP_MANIFEST['SUPER_SPARSE'] == '1':
         argvs += '--sparse '
     argvs += f'--group {V.SETUP_MANIFEST["GROUP_NAME"]}_a:{V.SETUP_MANIFEST["SUPER_SIZE"]} --group {V.SETUP_MANIFEST["GROUP_NAME"]}_b:{V.SETUP_MANIFEST["SUPER_SIZE"]} --output {V.out + "super.img"} '
     display(
-        f'重新合成: super.img <Size:{V.SETUP_MANIFEST["SUPER_SIZE"]}|Vab:{V.SETUP_MANIFEST["IS_VAB"]}|Sparse:{V.SETUP_MANIFEST["SUPER_SPARSE"]}>')
-    display(f"包含分区：{'|'.join(parts)}")
+        f'Repacking: super.img <Size:{V.SETUP_MANIFEST["SUPER_SIZE"]}|Vab:{V.SETUP_MANIFEST["IS_VAB"]}|Sparse:{V.SETUP_MANIFEST["SUPER_SPARSE"]}>')
+    display(f"Included partitions: {'|'.join(parts)}")
     with CoastTime():
         call(argvs)
     try:
@@ -675,7 +675,7 @@ def recompress(source, fsconfig, contexts, dumpinfo, flag=8):
     elif V.SETUP_MANIFEST["RESIZE_EROFSIMG"] == "2":
         printinform += "|lz4"
     display(printinform)
-    display(f"重新合成: {label}.img ...", 4)
+    display(f"Reassembling: {label}.img ...", 4)
 
     if V.SETUP_MANIFEST["REPACK_EROFS_IMG"] == "1":
         if call(mkerofs_cmd) != 0:
@@ -742,7 +742,7 @@ def recompress(source, fsconfig, contexts, dumpinfo, flag=8):
                     f_w.write(line)
 
         if flag > 8 or (V.SETUP_MANIFEST["REPACK_SPARSE_IMG"] == "1"):
-            display("开始转换: sparse format ...")
+            display("Starting conversion: sparse format ...")
             call(f"img2simg {distance} {distance.rsplit('.', 1)[0] + '_sparse.img'}")
             if os.path.exists(distance):
                 try:
@@ -756,7 +756,7 @@ def recompress(source, fsconfig, contexts, dumpinfo, flag=8):
                 except Exception as e:
                     print("Error moving file:", e)
                 if flag > 8:
-                    display(f"重新生成: {label}.new.dat ...", 3)
+                    display(f"Recreating: {label}.new.dat ...", 3)
                     img2sdat.main(distance, V.out, 4, label)
                     newdat = V.out + label + ".new.dat"
                     if os.path.isfile(newdat):
@@ -764,15 +764,15 @@ def recompress(source, fsconfig, contexts, dumpinfo, flag=8):
                         os.remove(distance)
                         if flag == 10:
                             level = V.SETUP_MANIFEST["REPACK_BR_LEVEL"]
-                            display(f"重新生成: {label}.new.dat.br | Level={level} ...", 3)
+                            display(f"Recreating: {label}.new.dat.br | Level={level} ...", 3)
                             newdat_brotli = newdat + ".br"
                             call(f"brotli -{level}jfo {newdat_brotli} {newdat}")
-                            print(f" {GREEN}打包成功{CLOSE}" if os.path.isfile(
-                                newdat_brotli) else f" {RED}打包失败{CLOSE}")
+                            print(f" {GREEN}Packaging successful{CLOSE}" if os.path.isfile(
+                                newdat_brotli) else f" {RED}Packaging failed{CLOSE}")
                     else:
-                        print(f" {RED}打包失败{CLOSE}")
+                        print(f" {RED}Packaging failed{CLOSE}")
     else:
-        print(f" {RED}打包失败{CLOSE}")
+        print(f" {RED}Packaging failed{CLOSE}")
 
 
 def rmdire(path):
@@ -789,9 +789,9 @@ def rmdire(path):
         try:
             shutil.rmtree(path)
         except PermissionError:
-            print("无法删除文件夹，权限不足")
+            print("Unable to delete the folder, insufficient permissions")
         else:
-            print("删除成功！")
+            print("Successfully deleted!")
 
 
 def unpackboot(file, distance):
@@ -885,10 +885,10 @@ def boot_utils(source, distance, flag=1):
     if not os.path.isdir(distance):
         os.makedirs(distance)
     if flag == 1:
-        display(f"正在分解: {os.path.basename(source)}")
+        display(f"Unpacking: {os.path.basename(source)}")
         unpackboot(source, distance)
     elif flag == 2:
-        display(f"重新合成: {os.path.basename(source)}.img")
+        display(f"Repacking: {os.path.basename(source)}.img")
         dboot(source, distance)
 
 
@@ -907,7 +907,7 @@ def decompress_img(source, distance, keep=1):
         boot_info = V.config + os.path.basename(distance) + '_kernel.txt'
         open(boot_info, 'w', encoding='utf-8').close()
     elif file_type == 'sparse':
-        display(f'正在转换: Unsparse Format [{os.path.basename(source)}] ...')
+        display(f'Converting: Unsparse Format [{os.path.basename(source)}] ...')
         new_source = imgextractor.ULTRAMAN().APPLE(source)
         if os.path.isfile(new_source):
             if keep == 0:
@@ -915,11 +915,11 @@ def decompress_img(source, distance, keep=1):
             decompress_img(new_source, distance)
     if file_type in ['ext', 'erofs', 'super']:
         if file_type != 'ext':
-            display(f'正在分解: {os.path.basename(source)} <{file_type}>', 3)
+            display(f'Decompressing: {os.path.basename(source)} <{file_type}>', 3)
         if not os.path.isdir(V.config):
             os.makedirs(V.config)
         if file_type == 'ext':
-            with Console().status(f"[yellow]正在提取{os.path.basename(source)}[/]"):
+            with Console().status(f"[yellow]Extracting {os.path.basename(source)}[/]"):
                 try:
                     imgextractor.ULTRAMAN().MONSTER(source, distance)
                 except:
@@ -937,7 +937,7 @@ def decompress_img(source, distance, keep=1):
                     source = source.replace('.unsparse', '')
                 call(f'extract.erofs -i {source.replace(os.sep, "/")} -o {V.main_dir} -x')
             elif file_type == 'super':
-                lpunpack.unpack(source,V.input )
+                lpunpack.unpack(source, V.input)
                 for img in glob(V.input + '*_*.img'):
                     if not V.SETUP_MANIFEST['IS_VAB'] == '1' or os.path.getsize(img) == 0:
                         os.remove(img)
@@ -952,7 +952,7 @@ def decompress_img(source, distance, keep=1):
                             os.rename(img, new_source)
                         except:
                             ...
-                j = input('> 是否继续分解img [0/1]: ') == 1
+                j = input('> Continue decompressing img [0/1]: ') == 1
                 if j != 1:
                     return
                 for img in glob(V.input + '*.img'):
@@ -1011,7 +1011,7 @@ def decompress_dat(transfer, source, distance, keep=0):
                     except:
                         ...
 
-    display(f"正在分解: {os.path.basename(source)} ...", 3)
+    display(f"Decompressing: {os.path.basename(source)} ...", 3)
     sdat2img.main(transfer, source, distance)
     if os.path.isfile(distance):
         tTime = time.time() - sTime
@@ -1030,7 +1030,7 @@ def decompress_dat(transfer, source, distance, keep=0):
 
 def decompress_bro(transfer, source, distance, keep=0):
     s_time = time.time()
-    display(f"正在分解: {os.path.basename(source)} ...", 3)
+    display(f"Decompressing: {os.path.basename(source)} ...", 3)
     call(f"brotli -df {source} -o {distance}")
     if os.path.isfile(distance):
         print("\x1b[1;32m [%ds]\x1b[0m" % (time.time() - s_time))
@@ -1047,18 +1047,26 @@ def decompress_bro(transfer, source, distance, keep=0):
 def decompress_bin(infile, outdir, flag='1'):
     os.system("cls" if os.name == "nt" else "clear")
     if flag == "1":
-        print(f"> {YELLOW}包含的所有镜像文件: {CLOSE}\n")
-        payload_partitions = extract_payload.info(infile).split()
+        print(f"> {YELLOW}All included image files: {CLOSE}\n")
+        dumper = extract_payload(infile, outdir)
+        payload_info = dumper.info()
+        if payload_info is None:
+            print(f"{RED}Error: Unable to retrieve payload information. {CLOSE}")
+            return
+        payload_partitions = payload_info["partitions"]
+        print(f"Partitions: {payload_partitions}")
         partitions = input(
-            f"> {RED}根据以上信息输入一个或多个镜像，以空格分开{CLOSE}\n> {MAGENTA}").split()
+            f"> {RED}Based on the above information, enter one or more images, separated by spaces{CLOSE}\n> {MAGENTA}").split()
         print("\n")
         for part in partitions:
             if part in payload_partitions:
-                extract_payload.run(infile, outdir, part)
+                dumper.run(infile, extract_partitions=[part], outDir=V.out)
+            else:
+                print(f"{RED}Error: Partition {part} not found in payload.{CLOSE}")
     else:
-        print(f"> {YELLOW}提取【{os.path.basename(infile)}】所有镜像文件:{CLOSE}\n")
-        extract_payload.main(infile, outdir)
-        j = input('> 是否继续分解img [0/1]: ') == 1
+        print(f"> {YELLOW}Extracting all image files from 【{os.path.basename(infile)}】: {CLOSE}\n")
+        dumper.main(infile, outdir)
+        j = input('> Continue decompressing img [0/1]: ') == 1
         if j != 1:
             return
         for img in glob(V.input + '*.img'):
@@ -1082,7 +1090,7 @@ def decompress_win(infile_list):
             continue
         with open(main, "ab" if os.path.exists(main) else "wb") as f:
             with open(i, "rb") as f2:
-                print(f'合并{i}到{main}')
+                print(f'Merging {i} into {main}')
                 f.write(f2.read())
             try:
                 os.remove(i)
@@ -1099,7 +1107,7 @@ def decompress_win(infile_list):
         elif tarfile.is_tarfile(i):
             with tarfile.open(i, 'r') as tar:
                 for n in tar.getmembers():
-                    print(f"正在提取:{n.name}")
+                    print(f"Extracting: {n.name}")
                     tar.extract(n, path=(V.main_dir + os.path.basename(i).rsplit('.', 1)[0]), filter='tar')
             i = os.path.basename(i).rsplit('.', 1)[0]
             fsconfig_0 = []
@@ -1135,7 +1143,7 @@ def decompress_win(infile_list):
                 symlinks_0.sort()
                 appendf("\n".join((str(h) for h in symlinks_0)), "%s_symlinks.txt" % i)
         else:
-            input("未知格式")
+            input("Unknown format")
 
 
 def decompress(infile, flag=4):
@@ -1148,7 +1156,7 @@ def decompress(infile, flag=4):
                 else:
                     transfer = None
             if not V.JM:
-                display(f'是否分解: {os.path.basename(part)} [1/0]: ', 2, '')
+                display(f'Decompress: {os.path.basename(part)} [1/0]: ', 2, '')
                 if input() != '1':
                     continue
             if flag == 2:
@@ -1161,7 +1169,7 @@ def decompress(infile, flag=4):
         if gettype.gettype(part) not in ('ext', 'sparse', 'erofs', 'super', 'boot', 'vendor_boot'):
             continue
         if not V.JM:
-            display(f'是否分解: {os.path.basename(part)} [1/0]: ', 2, '')
+            display(f'Decompress: {os.path.basename(part)} [1/0]: ', 2, '')
             if input() != '1':
                 continue
         decompress_img(part, V.main_dir + os.path.basename(part).rsplit('.', 1)[0])
@@ -1191,15 +1199,15 @@ def extract_zrom(rom):
         fantasy_zip = zipfile.ZipFile(rom)
         zip_lists = fantasy_zip.namelist()
     else:
-        input('> 破损的zip或不支持的zip类型')
+        input('> Corrupted zip or unsupported zip type')
         return
     if 'payload.bin' in zip_lists:
-        print(f'> 解压缩: {os.path.basename(rom)}')
+        print(f'> Extracting: {os.path.basename(rom)}')
         envelop_project()
         fantasy_zip.close()
         if os.path.isfile(V.input + 'payload.bin'):
             decompress_bin(fantasy_zip.extract('payload.bin', V.input), V.input,
-                           input(f'> {RED}选择提取方式:  [0]全盘提取  [1]指定镜像{CLOSE} >> '))
+                           input(f'> {RED}Choose extraction method:  [0]Extract all  [1]Specify image{CLOSE} >> '))
             menu_main()
     elif 'run.sh' in zip_lists:
         if not os.path.isdir(MOD_DIR):
@@ -1207,9 +1215,9 @@ def extract_zrom(rom):
         mod_name = os.path.basename(rom).rsplit('.', 1)[0].replace(' ', '_')
         sub_dir = MOD_DIR + 'DNA_' + mod_name
         if not os.path.isdir(sub_dir):
-            display(f'是否安装插件: {mod_name} ? [1/0]: ', 2, '')
+            display(f'Do you want to install the plugin: {mod_name}? [1/0]: ', 2, '')
         else:
-            display(f'已安装插件: {mod_name}，是否删除原插件后安装 ? [0/1]: ', 2, '')
+            display(f'Plugin {mod_name} is already installed, do you want to delete the original plugin and install it again? [0/1]: ', 2, '')
         if input() == '1':
             rmdire(sub_dir)
             fantasy_zip.extractall(sub_dir)
@@ -1217,14 +1225,14 @@ def extract_zrom(rom):
             if os.path.isfile(sub_dir + os.sep + 'run.sh'):
                 if os.name != 'nt':
                     change_permissions_recursive(sub_dir, 0o777)
-                print('\x1b[1;31m\n 安装完成 !!!\x1b[0m')
+                print('\x1b[1;31m\n Installation completed!!!\x1b[0m')
             else:
                 rmdire(sub_dir)
-                print('\x1b[1;31m\n 安装失败 !!!\x1b[0m')
+                print('\x1b[1;31m\n Installation failed!!!\x1b[0m')
     else:
         able = 5
         infile = []
-        print(f'> 解压缩: {os.path.basename(rom)}')
+        print(f'> Extracting: {os.path.basename(rom)}')
         envelop_project()
         fantasy_zip.extractall(V.input)
         fantasy_zip.close()
@@ -1238,7 +1246,7 @@ def extract_zrom(rom):
             infile = glob(V.input + '*.img')
             able = 4
         if not infile:
-            input('> 仅支持含有payload.bin/*.new.dat/*.new.dat.br/*.img的zip固件')
+            input('> Only zip firmware containing payload.bin/*.new.dat/*.new.dat.br/*.img is supported')
         else:
             quiet()
             decompress(infile, able)
@@ -1275,24 +1283,25 @@ def lists_project(dTitle, sPath, flag):
 
     print("\n-------------------------------------------------------")
     if flag == 0:
-        print("\x1b[0;35m  [33] - 解压      [44] - 删除\n  [77] - 设置      [66] - 下载\n  [88] - 退出  \x1b[0m\n")
+        print("\x1b[0;35m  [33] - Extract      [44] - Delete\n  [77] - Settings      [66] - Download\n  [88] - Exit  \x1b[0m\n")
 
     if flag == 2:
-        print("\x1b[0;35m  [33] - 安装         [44] - 删除         [88] - 退出  \x1b[0m\n")
+        print("\x1b[0;35m  [33] - Install         [44] - Delete         [88] - Exit  \x1b[0m\n")
 
 
 def choose_zrom(flag=0):
     os.system('cls' if os.name == 'nt' else 'clear')
     if flag == 1:
-        print('\x1b[0;33m> 选择固件:\x1b[0m')
-        s_file_path = askopenfilename(title='选择一个固件', filetypes=(("zip", "*.zip"),))
-        if s_file_path:
-            extract_zrom(s_file_path)
+        if os.name == 'nt':
+            print('\x1b[0;33m> Choose Firmware:\x1b[0m')
+            s_file_path = askopenfilename(title='Choose a firmware', filetypes=(("zip", "*.zip"),))
+            if s_file_path:
+                extract_zrom(s_file_path)
     else:
-        print('\x1b[0;33m> 固件列表\x1b[0m')
-        print(f"固件放置路径: {ROM_DIR}")
-        lists_project('返回上级', ROM_DIR + '*.zip', 1)
-        choice = input('> 选择: ')
+        print('\x1b[0;33m> Firmware List\x1b[0m')
+        print(f"Firmware storage path: {ROM_DIR}")
+        lists_project('Return to previous level', ROM_DIR + '*.zip', 1)
+        choice = input('> Choose: ')
         if choice:
             if int(choice) == 66:
                 download_zrom()
@@ -1335,27 +1344,27 @@ def download_rom(rom, url):
 
 
 def download_zrom():
-    url = input("> 输入直链: ")
+    url = input("> Enter direct link: ")
     if url:
         s_file_path = ROM_DIR + url.split("/")[-1]
         if not os.path.isfile(s_file_path):
             download_rom(s_file_path, url)
 
 
-def creat_project():
+def create_project():
     os.system("cls" if os.name == "nt" else "clear")
-    print("\x1b[1;31m> 新建工程:\x1b[0m\n")
-    creat_name = input("  输入名称【不能有空格、特殊符号】: DNA_").strip().rstrip("\\").replace(" ", "_")
-    if creat_name:
-        V.project = "DNA_" + creat_name
+    print("\x1b[1;31m> Create New Project:\x1b[0m\n")
+    create_name = input("  Enter name [no spaces or special characters]: DNA_").strip().rstrip("\\").replace(" ", "_")
+    if create_name:
+        V.project = "DNA_" + create_name
         if not os.path.isdir(V.project):
             os.mkdir(V.project)
             envelop_project()
             menu_main()
         else:
-            input(f"\x1b[0;31m\n 工程目录< \x1b[0;32m{V.project} \x1b[0;31m>已存在, 回车返回 ...\x1b[0m\n")
+            input(f"\x1b[0;31m\n Project directory < \x1b[0;32m{V.project} \x1b[0;31m> already exists, press Enter to return ...\x1b[0m\n")
             del V.project
-            creat_project()
+            create_project()
     else:
         menu_once()
 
@@ -1364,9 +1373,9 @@ def menu_once():
     load_setup_json()
     while True:
         os.system("cls" if os.name == "nt" else "clear")
-        print("\x1b[0;33m> 工程列表\x1b[0m")
-        lists_project("新建工程", "DNA_*", 0)
-        choice = input("> 选择: ")
+        print("\x1b[0;33m> Project List\x1b[0m")
+        lists_project("Create New Project", "DNA_*", 0)
+        choice = input("> Choose: ")
         if not choice or not choice.isdigit():
             continue
         if int(choice) == 88:
@@ -1375,19 +1384,19 @@ def menu_once():
             choose_zrom(int(os.name == "nt"))
         elif int(choice) == 44:
             if V.dict0:
-                which = input("> 输入序号进行删除: ")
+                which = input("> Enter number to delete: ")
                 if not which.isdigit():
                     continue
                 elif int(which) > 0:
                     if int(which) < len(V.dict0):
                         if input(
-                                f"\x1b[0;31m> 是否删除 \x1b[0;34mNo.{which} \x1b[0;31m工程: \x1b[0;32m{os.path.basename(V.dict0[int(which)])}\x1b[0;31m [0/1]:\x1b[0m ") == "1":
+                                f"\x1b[0;31m> Do you want to delete \x1b[0;34mNo.{which} \x1b[0;31mproject: \x1b[0;32m{os.path.basename(V.dict0[int(which)])}\x1b[0;31m [0/1]:\x1b[0m ") == "1":
                             if os.path.isdir(V.dict0[int(which)]):
                                 rmdire(V.dict0[int(which)])
                                 if IS_ARM64:
                                     if os.path.isdir(ROM_DIR + "D.N.A" + os.sep + V.dict0[int(which)]):
                                         input(
-                                            f"> 请自主判断删除内置存储 {ROM_DIR + 'D.N.A' + os.sep + V.dict0[int(which)]}")
+                                            f"> Please manually delete the internal storage {ROM_DIR + 'D.N.A' + os.sep + V.dict0[int(which)]}")
                                 menu_once()
                     input(f"> Number {which} Error !")
         elif int(choice) == 66:
@@ -1396,7 +1405,7 @@ def menu_once():
             env_setup()
             load_setup_json()
         elif int(choice) == 0:
-            creat_project()
+            create_project()
             break
         elif 0 < int(choice) < len(V.dict0):
             V.project = V.dict0[int(choice)]
@@ -1410,30 +1419,30 @@ def menu_once():
 def menu_more():
     while True:
         os.system("cls" if os.name == "nt" else "clear")
-        print(f"\x1b[1;36m> 当前工程: \x1b[0m{V.project}")
+        print(f"\x1b[1;36m> Current Project: \x1b[0m{V.project}")
         print("-------------------------------------------------------\n")
-        print("\x1b[0;31m  0> 返回上级    \x1b[0m")
-        print("\x1b[0;32m  1> 去除AVB    \x1b[0m")
-        print("\x1b[0;34m  2> 去除DM     \x1b[0m")
-        print("\x1b[0;31m  3> [A11+]全局合并dev    \x1b[0m")
-        print("\x1b[0;35m  4> 标准精简    \x1b[0m")
-        print("\x1b[0;32m  5> 添加文件    \x1b[0m")
-        print("\x1b[0;34m  6> 修补boot.img @twrp    \x1b[0m")
-        print("\x1b[0;36m  7> 修补boot.img @magisk    \x1b[0m")
-        print("\x1b[0;33m  8> 合成super.img    \x1b[0m\n")
+        print("\x1b[0;31m  0> Go Back    \x1b[0m")
+        print("\x1b[0;32m  1> Remove AVB    \x1b[0m")
+        print("\x1b[0;34m  2> Remove DM     \x1b[0m")
+        print("\x1b[0;31m  3> [A11+] Global Merge dev    \x1b[0m")
+        print("\x1b[0;35m  4> Standard Slimming    \x1b[0m")
+        print("\x1b[0;32m  5> Add Files    \x1b[0m")
+        print("\x1b[0;34m  6> Patch boot.img @twrp    \x1b[0m")
+        print("\x1b[0;36m  7> Patch boot.img @magisk    \x1b[0m")
+        print("\x1b[0;33m  8> Repack super.img    \x1b[0m\n")
         print("-------------------------------------------------------")
-        option = input(f"> {RED}输入序号{CLOSE} >> ")
+        option = input(f"> {RED}Enter Number{CLOSE} >> ")
         if not option.isdigit():
-            input("> 输入序号数字")
+            input("> Enter a numeric value")
             continue
         if int(option) == 0:
             break
         elif int(option) == 1:
             with CoastTime():
-                kill_avb()
+                disable_avb()
         elif int(option) == 2:
             with CoastTime():
-                kill_dm()
+                disable_dm_verity()
         elif int(option) == 3:
             with CoastTime():
                 devdex.deodex(V.project)
@@ -1445,7 +1454,7 @@ def menu_more():
                     f"{PWD_DIR}local/etc/devices/default/{V.SETUP_MANIFEST['ANDROID_SDK']}/reduce.txt"):
                 reduce_conf = f"{PWD_DIR}local/etc/devices/default/{V.SETUP_MANIFEST['ANDROID_SDK']}/reduce.txt"
             else:
-                input("精简列表<reduce.txt>丢失！")
+                input("Slimming list <reduce.txt> is missing!")
                 continue
             with CoastTime():
                 for line in open(reduce_conf):
@@ -1475,29 +1484,29 @@ def menu_more():
             repack_super()
         else:
             input(f"> Number \x1b[0;33m{option}\x1b[0m enter error !")
-        input('> 任意键继续')
+        input('> Press any key to continue')
 
 
 def menu_modules():
     while True:
         os.system("cls" if os.name == "nt" else "clear")
-        print("\x1b[0;33m> 插件列表\x1b[0m")
-        lists_project("返回上级", MOD_DIR + "DNA_*", 2)
-        choice = input("> 选择: ")
+        print("\x1b[0;33m> Plugin List\x1b[0m")
+        lists_project("Return to previous level", MOD_DIR + "DNA_*", 2)
+        choice = input("> Choose: ")
         if not choice.isdigit():
             continue
         if int(choice) == 88:
             sys.exit()
         elif int(choice) == 33:
-            extract_zrom(input("请输入插件路径："))
+            extract_zrom(input("Enter plugin path: "))
         elif int(choice) == 44:
             if V.dict0:
-                which = input("> 输入序号进行删除: ")
+                which = input("> Enter number to delete: ")
                 if int(which) == 0 or not which.isdigit():
                     continue
                 if int(which) <= len(V.dict0):
                     if input(
-                            f"\x1b[0;31m> 是否删除 \x1b[0;34mNo.{which} \x1b[0;31m插件: \x1b[0;32m{os.path.basename(V.dict0[int(which)])}\x1b[0;31m [0/1]:\x1b[0m ") == "1":
+                            f"\x1b[0;31m> Do you want to delete \x1b[0;34mNo.{which} \x1b[0;31mplugin: \x1b[0;32m{os.path.basename(V.dict0[int(which)])}\x1b[0;31m [0/1]:\x1b[0m ") == "1":
                         if os.path.isdir(V.dict0[int(which)]):
                             rmdire(V.dict0[int(which)])
                             continue
@@ -1507,16 +1516,16 @@ def menu_modules():
             return
         if 0 < int(choice) < len(V.dict0):
             os.system("cls" if os.name == "nt" else "clear")
-            print(f"\x1b[1;31m> 执行插件:\x1b[0m {os.path.basename(V.dict0[int(choice)])}\n")
+            print(f"\x1b[1;31m> Execute plugin:\x1b[0m {os.path.basename(V.dict0[int(choice)])}\n")
             if os.path.isfile(shell_sub := (V.dict0[int(choice)] + os.sep + "run.sh")):
                 call(f"busybox bash {shell_sub} {V.main_dir.replace(os.sep, '/')}")
-            input('> 任意键继续')
+            input('> Press any key to continue')
         else:
             print(f"> Number \x1b[0;33m{choice}\x1b[0m enter error !")
 
 
 def quiet():
-    V.JM = input('> 是否开启静默 [0/1]: ') == '1'
+    V.JM = input('> Enable silent mode [0/1]: ') == '1'
 
 
 menu_actions = {
@@ -1532,28 +1541,28 @@ menu_actions = {
 def menu_main():
     V.JM = True
     os.system('cls' if os.name == 'nt' else 'clear')
-    print(f'\x1b[1;36m> 当前工程: \x1b[0m{V.project}')
+    print(f'\x1b[1;36m> Current Project: \x1b[0m{V.project}')
     print('-------------------------------------------------------\n')
-    print('\x1b[0;31m\t  0> 选择[etc]          1> 分解[bin]\x1b[0m\n')
-    print('\x1b[0;32m\t  2> 分解[bro]          3> 分解[dat]\x1b[0m\n')
-    print('\x1b[0;36m\t  4> 分解[img]          5> 分解[win]\x1b[0m\n')
-    print('\x1b[0;33m\t  6> 更多[dev]          7> 插件[sub]\x1b[0m\n')
-    print('\x1b[0;35m\t  8> 合成[img]          9> 合成[dat]\x1b[0m\n')
-    print('\x1b[0;34m\t  10> 合成[bro]         88> 退出[bye]\x1b[0m\n')
+    print('\x1b[0;31m\t  0> Select [etc]          1> Decompress [bin]\x1b[0m\n')
+    print('\x1b[0;32m\t  2> Decompress [brotli]          3> Decompress [dat]\x1b[0m\n')
+    print('\x1b[0;36m\t  4> Decompress [img]          5> Decompress [win]\x1b[0m\n')
+    print('\x1b[0;33m\t  6> More [dev]          7> Plugins [sub]\x1b[0m\n')
+    print('\x1b[0;35m\t  8> Repack [img]          9> Repack [dat]\x1b[0m\n')
+    print('\x1b[0;34m\t  10> Repack [brotli]         88> Exit [bye]\x1b[0m\n')
     print('-------------------------------------------------------')
-    option = input(f'> {RED}输入序号{CLOSE} >> ')
+    option = input(f'> {RED}Enter number{CLOSE} >> ')
     if not option.isdigit():
-        input('> 输入序号数字')
+        input('> Enter a numeric value')
     else:
         if int(option) in menu_actions.keys():
             menu_actions[int(option)]()
         elif int(option) == 1:
             infile = V.input + 'payload.bin'
             if not os.path.exists(infile):
-                input("未发现Payload.Bin")
+                input("Payload.Bin not found")
             else:
                 decompress_bin(infile, V.input,
-                               input(f'> {RED}选择提取方式:  [0]全盘提取  [1]指定镜像{CLOSE} >> '))
+                               input(f'> {RED}Choose extraction method:  [0]Extract all  [1]Specify image{CLOSE} >> '))
         elif int(option) in [2, 3, 4]:
             quiet()
             decompress(glob(V.input + {2: "*.br", 3: "*.new.dat", 4: "*.img"}[int(option)]), int(option))
@@ -1571,7 +1580,7 @@ def menu_main():
                     source = V.main_dir + f_basename
                     if os.path.isdir(source):
                         if not V.JM:
-                            display(f'是否合成: {f_basename}.img [1/0]: ', end='')
+                            display(f'Repack: {f_basename}.img [1/0]: ', end='')
                             if input() != '1':
                                 continue
                         boot_utils(source, V.out, 2)
@@ -1595,11 +1604,11 @@ def menu_main():
                     if os.path.isfile(contexts) and os.path.isfile(fsconfig):
                         if not V.JM:
                             txts = {8: "img", 9: "new.dat", 10: "new.dat.br"}
-                            display(f'是否合成: {f_basename}.{txts.get(int(option), ".new.dat.br")} [1/0]: ', end='')
+                            display(f'Repack: {f_basename}.{txts.get(int(option), ".new.dat.br")} [1/0]: ', end='')
                             if input() != '1':
                                 continue
                         recompress(source, fsconfig, contexts, infojson, int(option))
         else:
             input(f'\x1b[0;33m{option}\x1b[0m enter error !')
-        input('> 任意键继续')
+        input('> Press any key to continue')
     menu_main()

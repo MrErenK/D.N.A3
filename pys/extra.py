@@ -73,7 +73,7 @@ def script2fs_context(input_f, outdir, project):
             last_fpath = fpath
 
     # generate config
-    print("生成fs_config 和 file_contexts")
+    print("Generating fs_config and file_contexts")
     fs_label.sort()
     fc_label.sort()
     with open(os.path.join(outdir, "system_fs_config"), 'w', newline='\n') as fs_config, open(

@@ -1,0 +1,5 @@
+*__pycache__
+DNA_*
+build/
+dist/
+*.spec

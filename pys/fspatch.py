@@ -19,7 +19,7 @@ Patch Fs_Config To Add Missing File Config
 """
 import os
 from collections import deque
-
+from typing import Generator
 
 def scanfs(file: str) -> dict:
     """
@@ -43,8 +43,7 @@ def scanfs(file: str) -> dict:
                 print(f"[W] {i[0]} has too much data-{long}.")
     return filesystem_config
 
-
-def scan_dir(folder: str) -> list:
+def scan_dir(folder: str) -> Generator[str, None, None]:
     """
     Scan Folder , Return A path One By One
     :param folder:
@@ -64,7 +63,6 @@ def scan_dir(folder: str) -> list:
             yield os.path.join(root, file).replace(folder, os.path.basename(folder)).replace('\\', '/')
         yield from allfiles
 
-
 def islink(file) -> str:
     """
     Determine if it is a SymLink
@@ -80,7 +78,6 @@ def islink(file) -> str:
         if os.path.islink(file):
             return os.readlink(file)
     return ''
-
 
 def fs_patch(fs_file, dir_path) -> tuple:  # 接收两个字典对比
     """
@@ -151,7 +148,6 @@ def fs_patch(fs_file, dir_path) -> tuple:  # 接收两个字典对比
             new_add += 1
             new_fs[i] = config
     return new_fs, new_add
-
 
 def main(dir_path: str, fs_config: str):
     """

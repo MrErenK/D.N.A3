@@ -41,58 +41,89 @@ class Dumper:
     def open_payloadfile(self):
         return open(self.payloadpath, 'rb')
 
-    def run(self, slow=False) -> bool:
-        if self.images == "":
-            partitions = self.dam.partitions
-        else:
-            partitions = []
-            for image in self.images:
-                found = False
-                for dam_part in self.dam.partitions:
-                    if dam_part.partition_name == image:
-                        partitions.append(dam_part)
-                        found = True
-                        break
-                if not found:
-                    print(f"Partition {image} not found in image")
+    def info(self):
+        if not hasattr(self, 'dam') or not hasattr(self.dam, 'partitions'):
+            raise AttributeError("'Dumper' object has no attribute 'dam' or 'dam.partitions'")
+        return {
+            "partitions": [part.partition_name for part in self.dam.partitions],
+        }
 
-        if len(partitions) == 0:
-            print("Not operating on any partitions")
-            return False
+    def run(self, slow=False, extract_partitions=None, outDir=None) -> bool:
+        try:
+            if self.images == "" and extract_partitions is None:
+                partitions = self.dam.partitions
+            else:
+                partitions = []
+                if self.images != "":
+                    for image in self.images:
+                        found = False
+                        for dam_part in self.dam.partitions:
+                            if dam_part.partition_name == image:
+                                partitions.append(dam_part)
+                                found = True
+                                break
+                        if not found:
+                            print(f"Partition {image} not found in image")
+                if extract_partitions is not None:
+                    for part_name in extract_partitions:
+                        found = False
+                        for dam_part in self.dam.partitions:
+                            if dam_part.partition_name == part_name:
+                                partitions.append(dam_part)
+                                found = True
+                                break
+                        if not found:
+                            print(f"Partition {part_name} not found in image")
 
-        partitions_with_ops = []
-        for partition in partitions:
-            operations = []
-            for operation in partition.operations:
-                self.payloadfile.seek(self.data_offset + operation.data_offset)
-                operations.append(
+            if len(partitions) == 0:
+                print("Not operating on any partitions")
+                return False
+
+            if outDir is None:
+                outDir = self.out
+
+            partitions_with_ops = []
+            for partition in partitions:
+                operations = []
+                for operation in partition.operations:
+                    self.payloadfile.seek(self.data_offset + operation.data_offset)
+                    operations.append(
+                        {
+                            "data_offset": self.payloadfile.tell(),
+                            "operation": operation,
+                            "data_length": operation.data_length,
+                        }
+                    )
+                partitions_with_ops.append(
                     {
-                        "data_offset": self.payloadfile.tell(),
-                        "operation": operation,
-                        "data_length": operation.data_length,
+                        "partition": partition,
+                        "operations": operations,
                     }
                 )
-            partitions_with_ops.append(
-                {
-                    "partition": partition,
-                    "operations": operations,
-                }
-            )
+            partition_word = "partition" if len(partitions_with_ops) == 1 else "partitions"
+            print(f"Extracting {len(partitions_with_ops)} {partition_word} to {outDir}...")
 
-        self.payloadfile.close()
-        if slow:
-            self.extract_slow(partitions_with_ops)
-        else:
-            self.multiprocess_partitions(partitions_with_ops)
-        return True
+            if slow:
+                for part in partitions_with_ops:
+                    print(f"Extracting partition {part['partition'].partition_name}...")
+                self.extract_slow(partitions_with_ops, outDir)
+            else:
+                for part in partitions_with_ops:
+                    print(f"Extracting partition {part['partition'].partition_name}...")
+                self.multiprocess_partitions(partitions_with_ops, outDir)
+            print("Done!")
+            return True
+        except Exception as e:
+            print(f"Error: {e}")
+            return False
 
-    def extract_slow(self, partitions):
+    def extract_slow(self, partitions, outDir):
         for part in partitions:
-            self.dump_part(part)
+            self.dump_part(part, outDir)
 
-    def multiprocess_partitions(self, partitions):
+    def multiprocess_partitions(self, partitions, outDir):
         with ThreadPoolExecutor(max_workers=self.workers) as executor:
-            futures = {executor.submit(self.dump_part, part): part for part in partitions}
+            futures = {executor.submit(self.dump_part, part, outDir): part for part in partitions}
             for future in as_completed(futures):
                 partition_name = futures[future]['partition'].partition_name
                 try:
@@ -196,12 +227,14 @@ class Dumper:
             sys.exit(-1)
         del data
 
-    def dump_part(self, part):
+    def dump_part(self, part, outDir):
         name = part["partition"].partition_name
-        out_file = open(f"{self.out}/{name}.img", "wb")
+        out_file_path = f"{outDir}/{name}.img"
+        out_file = open(out_file_path, "wb")
 
         if self.diff:
-            old_file = open(f"{self.old}/{name}.img", "rb")
+            old_file_path = f"{self.old}/{name}.img"
+            old_file = open(old_file_path, "rb")
         else:
             old_file = None
 

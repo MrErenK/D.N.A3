@@ -16,6 +16,7 @@
 # limitations under the License.
 import os
 from re import escape
+from typing import Generator
 
 fix_permission = {
     "system/app/*/.apk": "u:object_r:system_file:s0",
@@ -31,7 +32,7 @@ fix_permission = {
 }
 
 
-def scan_context(file) -> dict:  # 读取context文件返回一个字典
+def scan_context(file) -> dict:  # Read the context file and return a dictionary
     context = {}
     with open(file, "r", encoding='utf-8') as file_:
         for i in file_.readlines():
@@ -42,12 +43,11 @@ def scan_context(file) -> dict:  # 读取context文件返回一个字典
             filepath = filepath.replace(r'\@', '@')
             context[filepath] = other
             if len(other) > 1:
-                print(f"[Warn] {i[0]} has too much data.Skip.")
+                print(f"[Warn] {i[0]} has too much data. Skip.")
                 del context[filepath]
     return context
 
-
-def scan_dir(folder) -> list:  # 读取解包的目录，返回一个字典
+def scan_dir(folder) -> Generator[str, None, None]:  # Read the unpacked directory and return a list
     part_name = os.path.basename(folder)
     allfiles = ['/', '/lost+found', f'/{part_name}/lost+found', f'/{part_name}', f'/{part_name}/']
     for root, dirs, files in os.walk(folder, topdown=True):
@@ -62,16 +62,16 @@ def str_to_selinux(string: str):
     return escape(string).replace('\\-', '-')
 
 
-def context_patch(fs_file, dir_path) -> tuple:  # 接收两个字典对比
+def context_patch(fs_file, dir_path) -> tuple:  # Receive two dictionaries and compare
     new_fs = {}
-    # 定义已修补过的 避免重复修补
+    # Define already patched to avoid duplicate patches
     r_new_fs = {}
     add_new = 0
-    print(f"ContextPatcher: the Original File Has {len(fs_file.keys()):d}" + " entries")
-    # 定义默认SeLinux标签
+    print(f"ContextPatcher: the Original File Has {len(fs_file.keys()):d} entries")
+    # Define default SeLinux label
     permission_d = ['u:object_r:system_file:s0']
     for i in scan_dir(os.path.abspath(dir_path)):
-        # 把不可打印字符替换为*
+        # Replace non-printable characters with *
         if not i.isprintable():
             tmp = ''
             for c in i:
@@ -81,15 +81,15 @@ def context_patch(fs_file, dir_path) -> tuple:  # 接收两个字典对比
             i = i.replace(' ', '*')
         i = str_to_selinux(i)
         if fs_file.get(i):
-            # 如果存在直接使用默认的
+            # If it exists, use the default
             new_fs[i] = fs_file[i]
         else:
             permission = None
             if r_new_fs.get(i):
                 continue
-            # 确认i不为空
+            # Ensure i is not empty
             if i:
-                # 搜索已定义的权限
+                # Search for defined permissions
                 for f in fix_permission.keys():
                     if f in i:
                         permission = [fix_permission[f]]
